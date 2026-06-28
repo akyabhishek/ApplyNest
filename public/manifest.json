@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "ApplyNest",
   "description": "Save job application details once, then copy or fill them anywhere quickly.",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "icons": {
     "16": "icon16.png",
     "32": "icon32.png",
@@ -25,7 +25,13 @@
     "service_worker": "assets/service-worker.js",
     "type": "module"
   },
-  "permissions": ["storage", "activeTab", "scripting", "sidePanel", "clipboardWrite"],
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "sidePanel",
+    "clipboardWrite"
+  ],
   "host_permissions": [
     "*://www.linkedin.com/*",
     "*://*.greenhouse.io/*",
@@ -62,7 +68,9 @@
         "*://*.ashbyhq.com/*",
         "*://*.smartrecruiters.com/*"
       ],
-      "js": ["assets/content.js"],
+      "js": [
+        "assets/content.js"
+      ],
       "run_at": "document_idle"
     }
   ]
