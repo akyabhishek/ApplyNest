@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "bundle": "npm run build; powershell -NoProfile -ExecutionPolicy Bypass -Command \"New-Item -ItemType Directory -Force release | Out-Null; Compress-Archive -Path dist\\* -DestinationPath release\\ApplyNest-extension.zip -Force\"",
+    "release:push": "node scripts/release-push.mjs",
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "format": "prettier --write .",

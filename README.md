@@ -76,3 +76,26 @@ Note: Chrome extension contexts (service worker/content script) are validated fr
 
 - Contribution guide: see `CONTRIBUTING.md`
 - Security policy: see `SECURITY.md`
+
+## Release and Direct Download
+
+Users can download the extension ZIP directly from GitHub Releases:
+
+- https://github.com/akyabhishek/ApplyNest/releases
+
+Local commands:
+
+```bash
+# Build + create local ZIP at release/ApplyNest-extension.zip
+npm run bundle
+
+# Push a GitHub release tag (uses version from public/manifest.json)
+npm run release:push
+```
+
+Release flow:
+
+1. Update `version` in both `package.json` and `public/manifest.json` to the same value.
+2. Commit and push to `main`.
+3. Run `npm run release:push`.
+4. GitHub Actions (`release.yml`) builds the extension and publishes a release asset named `ApplyNest-extension-vX.Y.Z.zip`.
