@@ -9,49 +9,61 @@ type SortOption = 'relevance' | 'label_asc' | 'label_desc' | 'category' | 'user_
 const SORT_STORAGE_KEY = 'applynest_sidepanel_sort'
 const USER_ORDER_STORAGE_KEY = 'applynest_sidepanel_user_order'
 
+const isSortOption = (value: string): value is SortOption => {
+  return (
+    value === 'relevance' ||
+    value === 'label_asc' ||
+    value === 'label_desc' ||
+    value === 'category' ||
+    value === 'user_order'
+  )
+}
+
+const getInitialSortBy = (): SortOption => {
+  try {
+    const saved = localStorage.getItem(SORT_STORAGE_KEY)
+    if (saved && isSortOption(saved)) {
+      return saved
+    }
+  } catch {
+    // Ignore localStorage failures in restricted extension contexts.
+  }
+
+  return 'relevance'
+}
+
+const getInitialUserOrder = (): string[] => {
+  try {
+    const savedOrder = localStorage.getItem(USER_ORDER_STORAGE_KEY)
+    if (!savedOrder) return []
+
+    const parsed = JSON.parse(savedOrder) as unknown
+    if (!Array.isArray(parsed)) return []
+
+    return parsed.filter((entry): entry is string => typeof entry === 'string')
+  } catch {
+    // Ignore invalid stored order payloads.
+    return []
+  }
+}
+
+const mergeUserOrderWithActiveFields = (order: string[], activeFieldIds: string[]) => {
+  if (!activeFieldIds.length) return order
+
+  const kept = order.filter((fieldId) => activeFieldIds.includes(fieldId))
+  const missing = activeFieldIds.filter((fieldId) => !kept.includes(fieldId))
+  return [...kept, ...missing]
+}
+
 export function SidepanelApp() {
   const [query, setQuery] = useState('')
   const [copiedItemId, setCopiedItemId] = useState<string | null>(null)
   const [failedItemId, setFailedItemId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'fields' | 'templates'>('fields')
-  const [sortBy, setSortBy] = useState<SortOption>('relevance')
+  const [sortBy, setSortBy] = useState<SortOption>(getInitialSortBy)
   const [arrangeMode, setArrangeMode] = useState(false)
-  const [userOrder, setUserOrder] = useState<string[]>([])
+  const [userOrder, setUserOrder] = useState<string[]>(getInitialUserOrder)
   const queryClient = useQueryClient()
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(SORT_STORAGE_KEY) as SortOption | null
-      if (!saved) return
-
-      if (
-        saved === 'relevance' ||
-        saved === 'label_asc' ||
-        saved === 'label_desc' ||
-        saved === 'category' ||
-        saved === 'user_order'
-      ) {
-        setSortBy(saved)
-      }
-    } catch {
-      // Ignore localStorage failures in restricted extension contexts.
-    }
-  }, [])
-
-  useEffect(() => {
-    try {
-      const savedOrder = localStorage.getItem(USER_ORDER_STORAGE_KEY)
-      if (!savedOrder) return
-
-      const parsed = JSON.parse(savedOrder) as unknown
-      if (!Array.isArray(parsed)) return
-
-      const validOrder = parsed.filter((entry): entry is string => typeof entry === 'string')
-      setUserOrder(validOrder)
-    } catch {
-      // Ignore invalid stored order payloads.
-    }
-  }, [])
 
   useEffect(() => {
     try {
@@ -78,19 +90,15 @@ export function SidepanelApp() {
       })
   })
 
-  useEffect(() => {
-    const activeFieldIds = results
-      .filter((item) => Boolean(item.fieldId))
-      .map((item) => item.fieldId as string)
+  const activeFieldIds = useMemo(
+    () => results.filter((item) => Boolean(item.fieldId)).map((item) => item.fieldId as string),
+    [results]
+  )
 
-    if (!activeFieldIds.length) return
-
-    setUserOrder((prev) => {
-      const kept = prev.filter((fieldId) => activeFieldIds.includes(fieldId))
-      const missing = activeFieldIds.filter((fieldId) => !kept.includes(fieldId))
-      return [...kept, ...missing]
-    })
-  }, [results])
+  const effectiveUserOrder = useMemo(
+    () => mergeUserOrderWithActiveFields(userOrder, activeFieldIds),
+    [userOrder, activeFieldIds]
+  )
 
   const topResults = useMemo(() => {
     const filtered = results.filter(
@@ -111,7 +119,7 @@ export function SidepanelApp() {
         return a.label.localeCompare(b.label)
       })
     } else if (sortBy === 'user_order') {
-      const orderMap = new Map(userOrder.map((fieldId, index) => [fieldId, index]))
+      const orderMap = new Map(effectiveUserOrder.map((fieldId, index) => [fieldId, index]))
 
       sorted.sort((a, b) => {
         const aIndex = a.fieldId ? orderMap.get(a.fieldId) : undefined
@@ -131,22 +139,23 @@ export function SidepanelApp() {
     }
 
     return sorted.slice(0, 20)
-  }, [results, sortBy, userOrder, activeTab])
+  }, [results, sortBy, effectiveUserOrder, activeTab])
 
   const userOrderIndexMap = useMemo(
-    () => new Map(userOrder.map((fieldId, index) => [fieldId, index])),
-    [userOrder]
+    () => new Map(effectiveUserOrder.map((fieldId, index) => [fieldId, index])),
+    [effectiveUserOrder]
   )
 
   const moveInUserOrder = (fieldId: string, direction: 'up' | 'down') => {
     setUserOrder((prev) => {
-      const currentIndex = prev.indexOf(fieldId)
+      const normalizedOrder = mergeUserOrderWithActiveFields(prev, activeFieldIds)
+      const currentIndex = normalizedOrder.indexOf(fieldId)
       if (currentIndex === -1) return prev
 
       const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
-      if (targetIndex < 0 || targetIndex >= prev.length) return prev
+      if (targetIndex < 0 || targetIndex >= normalizedOrder.length) return prev
 
-      const next = [...prev]
+      const next = [...normalizedOrder]
       const temp = next[currentIndex]
       next[currentIndex] = next[targetIndex]
       next[targetIndex] = temp
@@ -321,8 +330,8 @@ export function SidepanelApp() {
                         moveInUserOrder(item.fieldId as string, 'down')
                       }}
                       disabled={
-                        (userOrderIndexMap.get(item.fieldId) ?? userOrder.length - 1) >=
-                        userOrder.length - 1
+                        (userOrderIndexMap.get(item.fieldId) ?? effectiveUserOrder.length - 1) >=
+                        effectiveUserOrder.length - 1
                       }
                       className="inline-flex h-3.5 w-3.5 items-center justify-center rounded border border-white/15 text-slate-200 disabled:opacity-40"
                     >
