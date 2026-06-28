@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  font-family: "Sora", "Manrope", "Segoe UI", sans-serif;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background:
+    radial-gradient(circle at 10% 20%, rgba(42, 157, 143, 0.24), transparent 45%),
+    radial-gradient(circle at 80% 0%, rgba(244, 162, 97, 0.22), transparent 40%),
+    linear-gradient(165deg, #0b1f2a 0%, #102a3a 40%, #13212b 100%);
+  color: #f6f8fa;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.applynest-glass {
+  background: rgba(14, 30, 40, 0.58);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}

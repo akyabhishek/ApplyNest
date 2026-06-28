@@ -1,0 +1,66 @@
+{
+    "manifest_version": 3,
+    "name": "ApplyNest",
+    "description": "Save job application details once, then copy or fill them anywhere quickly.",
+    "version": "0.1.0",
+    "action": {
+        "default_title": "ApplyNest"
+    },
+    "options_page": "options.html",
+    "side_panel": {
+        "default_path": "sidepanel.html"
+    },
+    "background": {
+        "service_worker": "assets/service-worker.js",
+        "type": "module"
+    },
+    "permissions": [
+        "storage",
+        "activeTab",
+        "scripting",
+        "sidePanel",
+        "clipboardWrite"
+    ],
+    "host_permissions": [
+        "*://www.linkedin.com/*",
+        "*://*.greenhouse.io/*",
+        "*://*.lever.co/*",
+        "*://*.workday.com/*",
+        "*://*.myworkdayjobs.com/*",
+        "*://*.ashbyhq.com/*",
+        "*://*.smartrecruiters.com/*"
+    ],
+    "commands": {
+        "_execute_action": {
+            "suggested_key": {
+                "default": "Ctrl+Shift+K",
+                "mac": "Command+Shift+K"
+            },
+            "description": "Open ApplyNest"
+        },
+        "toggle-side-panel": {
+            "suggested_key": {
+                "default": "Ctrl+Shift+L",
+                "mac": "Command+Shift+L"
+            },
+            "description": "Toggle ApplyNest side panel"
+        }
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "*://www.linkedin.com/*",
+                "*://*.greenhouse.io/*",
+                "*://*.lever.co/*",
+                "*://*.workday.com/*",
+                "*://*.myworkdayjobs.com/*",
+                "*://*.ashbyhq.com/*",
+                "*://*.smartrecruiters.com/*"
+            ],
+            "js": [
+                "assets/content.js"
+            ],
+            "run_at": "document_idle"
+        }
+    ]
+}
