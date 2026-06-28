@@ -7,20 +7,23 @@ labels: bug
 ## Summary
 
 ## Environment
+
 - Browser:
 - Extension version:
 - OS:
 
 ## Steps to Reproduce
-1. 
-2. 
-3. 
+
+1.
+2.
+3.
 
 ## Expected Behavior
 
 ## Actual Behavior
 
 ## Affected Context
+
 - [ ] Popup
 - [ ] Options
 - [ ] Side panel

@@ -1,8 +1,8 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 :root {
   color-scheme: dark;
-  font-family: "Sora", "Manrope", "Segoe UI", sans-serif;
+  font-family: 'Sora', 'Manrope', 'Segoe UI', sans-serif;
 }
 
 body {
