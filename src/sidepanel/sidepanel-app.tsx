@@ -198,7 +198,10 @@ export function SidepanelApp() {
     <main className="min-h-screen p-1.5 text-white sm:p-2">
       <section className="applynest-glass rounded-xl p-2">
         <header className="mb-1.5 flex items-center justify-between gap-2">
-          <h1 className="text-xs font-semibold tracking-wide text-slate-100">ApplyNest</h1>
+          <div className="flex items-center gap-1.5">
+            <img src="/logo.png" alt="ApplyNest logo" className="h-6 w-6 rounded object-cover" />
+            <h1 className="text-xs font-semibold tracking-wide text-slate-100">ApplyNest</h1>
+          </div>
           <button
             type="button"
             onClick={openVaultSettings}

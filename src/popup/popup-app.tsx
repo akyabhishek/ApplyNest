@@ -74,9 +74,12 @@ export function PopupApp() {
     <main className="min-h-[560px] w-[380px] p-4 text-white">
       <section className="applynest-glass rounded-2xl p-4 shadow-2xl">
         <header className="mb-3 flex items-center justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.22em] text-cyan-100/70">ApplyNest</p>
-            <h1 className="mt-1 text-lg font-semibold">Quick Launcher</h1>
+          <div className="flex items-center gap-2">
+            <img src="/logo.png" alt="ApplyNest logo" className="h-8 w-8 rounded-md object-cover" />
+            <div>
+              <p className="text-xs uppercase tracking-[0.22em] text-cyan-100/70">ApplyNest</p>
+              <h1 className="mt-1 text-lg font-semibold">Quick Launcher</h1>
+            </div>
           </div>
           <Sparkles className="h-5 w-5 text-cyan-200" />
         </header>
