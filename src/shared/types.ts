@@ -51,3 +51,10 @@ export interface FieldSuggestion {
   value: string
   confidence: Confidence
 }
+
+export type InsertValueFailureReason = 'NO_TARGET' | 'NO_ACTIVE_TAB' | 'CONTENT_UNAVAILABLE'
+
+export interface InsertValueResult {
+  ok: boolean
+  reason?: InsertValueFailureReason
+}

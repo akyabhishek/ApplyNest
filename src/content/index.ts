@@ -1,5 +1,5 @@
 import { sendRuntimeMessage } from '../shared/messaging'
-import type { FieldSuggestion, SearchResultItem } from '../shared/types'
+import type { FieldSuggestion, InsertValueResult, SearchResultItem } from '../shared/types'
 
 type Candidate = {
   elementId: string
@@ -11,6 +11,7 @@ const ELEMENT_ID_ATTR = 'data-applynest-id'
 const CHIP_ATTR = 'data-applynest-chip-for'
 
 let mounted = false
+let lastFocusedElementId: string | null = null
 
 function canMountOnCurrentPage() {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -151,6 +152,14 @@ function ensureElementId(element: HTMLElement) {
   return element.getAttribute(ELEMENT_ID_ATTR)!
 }
 
+function isFillableElement(element: Element | null): element is HTMLElement {
+  return (
+    element instanceof HTMLElement &&
+    element.matches(INPUT_SELECTOR) &&
+    !element.hasAttribute('disabled')
+  )
+}
+
 function collectCandidates(): Candidate[] {
   return fieldElements()
     .map((element) => {
@@ -168,21 +177,90 @@ function collectCandidates(): Candidate[] {
 }
 
 function fillElement(element: HTMLElement, value: string) {
-  if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+  if (element instanceof HTMLInputElement) {
+    if (element.disabled || element.readOnly) {
+      return false
+    }
+
+    const blockedTypes = new Set(['file', 'checkbox', 'radio', 'button', 'submit', 'reset'])
+    if (blockedTypes.has(element.type)) {
+      return false
+    }
+
     element.value = value
-  } else if (element instanceof HTMLSelectElement) {
+    element.dispatchEvent(new Event('input', { bubbles: true }))
+    element.dispatchEvent(new Event('change', { bubbles: true }))
+    return true
+  }
+
+  if (element instanceof HTMLTextAreaElement) {
+    if (element.disabled || element.readOnly) {
+      return false
+    }
+
+    element.value = value
+    element.dispatchEvent(new Event('input', { bubbles: true }))
+    element.dispatchEvent(new Event('change', { bubbles: true }))
+    return true
+  }
+
+  if (element instanceof HTMLSelectElement) {
+    if (element.disabled) {
+      return false
+    }
+
     const option = [...element.options].find(
       (entry) =>
         entry.value.toLowerCase() === value.toLowerCase() ||
         entry.text.toLowerCase() === value.toLowerCase()
     )
-    if (option) {
-      element.value = option.value
+    if (!option) {
+      return false
     }
+
+    element.value = option.value
+    element.dispatchEvent(new Event('input', { bubbles: true }))
+    element.dispatchEvent(new Event('change', { bubbles: true }))
+    return true
   }
 
-  element.dispatchEvent(new Event('input', { bubbles: true }))
-  element.dispatchEvent(new Event('change', { bubbles: true }))
+  return false
+}
+
+function resolveInsertTarget(): HTMLElement | null {
+  const activeElement = document.activeElement
+  if (isFillableElement(activeElement)) {
+    ensureElementId(activeElement)
+    return activeElement
+  }
+
+  if (!lastFocusedElementId) {
+    return null
+  }
+
+  const fallback = document.querySelector(
+    `[${ELEMENT_ID_ATTR}="${escapeAttributeValue(lastFocusedElementId)}"]`
+  )
+
+  return isFillableElement(fallback) ? fallback : null
+}
+
+function insertIntoFocusedField(value: string): InsertValueResult {
+  const target = resolveInsertTarget()
+  if (!target) {
+    return { ok: false, reason: 'NO_TARGET' }
+  }
+
+  try {
+    const inserted = fillElement(target, value)
+    if (!inserted) {
+      return { ok: false, reason: 'NO_TARGET' }
+    }
+
+    return { ok: true }
+  } catch {
+    return { ok: false, reason: 'NO_TARGET' }
+  }
 }
 
 function upsertSuggestionChip(suggestion: FieldSuggestion) {
@@ -314,6 +392,26 @@ function mount() {
   ensureStyles()
   mountFloatingWidget()
   void runSmartDetection()
+
+  document.addEventListener('focusin', (event) => {
+    const target = event.target instanceof Element ? event.target : null
+    if (!isFillableElement(target)) return
+
+    lastFocusedElementId = ensureElementId(target)
+  })
+
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type !== 'INSERT_VALUE_IN_FOCUSED_FIELD') {
+      return
+    }
+
+    const value =
+      message.payload && typeof message.payload.value === 'string' ? message.payload.value : ''
+
+    const result = insertIntoFocusedField(value)
+    sendResponse(result)
+    return true
+  })
 
   if (!document.body) {
     window.addEventListener(
