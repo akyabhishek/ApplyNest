@@ -798,11 +798,18 @@ export function OptionsApp() {
     <main className="mx-auto min-h-screen w-full max-w-5xl p-8 text-white">
       <section className="applynest-glass rounded-3xl p-6">
         <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold">ApplyNest Vault Settings</h1>
-            <p className="mt-1 text-sm text-slate-300">
-              Everything is stored locally in chrome.storage by default.
-            </p>
+          <div className="flex items-center gap-3">
+            <img
+              src="/logo.png"
+              alt="ApplyNest logo"
+              className="h-12 w-12 rounded-lg object-cover"
+            />
+            <div>
+              <h1 className="text-2xl font-semibold">ApplyNest Vault Settings</h1>
+              <p className="mt-1 text-sm text-slate-300">
+                Everything is stored locally in chrome.storage by default.
+              </p>
+            </div>
           </div>
           <div className="relative flex gap-2">
             <input

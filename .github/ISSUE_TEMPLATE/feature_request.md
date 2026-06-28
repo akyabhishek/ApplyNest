@@ -13,6 +13,7 @@ labels: enhancement
 ## User Impact
 
 ## Affected Context
+
 - [ ] Popup
 - [ ] Options
 - [ ] Side panel
