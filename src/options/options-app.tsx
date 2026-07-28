@@ -414,7 +414,7 @@ export function OptionsApp() {
   // Theme effect
   useEffect(() => {
     const applyTheme = (mode: 'dark' | 'light' | 'system') => {
-      let resolved: 'dark' | 'light' =
+      const resolved: 'dark' | 'light' =
         mode === 'system'
           ? window.matchMedia('(prefers-color-scheme: dark)').matches
             ? 'dark'
@@ -722,7 +722,7 @@ export function OptionsApp() {
       if (
         val &&
         !/^https?:\/\/.+/i.test(val) &&
-        !/^[a-z0-9]+([\-\.][a-z0-9]+)*\.[a-z]{2,}/i.test(val)
+        !/^[a-z0-9]+([-.][a-z0-9]+)*\.[a-z]{2,}/i.test(val)
       ) {
         setHelperMessage('Value looks like a link field but is not a valid URL.')
         return
@@ -735,7 +735,7 @@ export function OptionsApp() {
       }
     }
     if (resolvedKey === 'phone' || form.label.toLowerCase().includes('phone')) {
-      if (form.value.trim() && !/^[\d\s\+\-\(\)]{7,20}$/.test(form.value.trim())) {
+      if (form.value.trim() && !/^[\d\s+\-()]{7,20}$/.test(form.value.trim())) {
         setHelperMessage('Please enter a valid phone number.')
         return
       }
