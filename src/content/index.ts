@@ -1,4 +1,3 @@
-import { sendRuntimeMessage } from '../shared/messaging'
 import type { FieldSuggestion, InsertValueResult, SearchResultItem } from '../shared/types'
 
 type Candidate = {
@@ -12,6 +11,21 @@ const CHIP_ATTR = 'data-applynest-chip-for'
 
 let mounted = false
 let lastFocusedElementId: string | null = null
+
+type RuntimeMessage = {
+  type: string
+  payload?: unknown
+}
+
+const hasRuntime = () => typeof chrome !== 'undefined' && Boolean(chrome.runtime?.sendMessage)
+
+async function sendRuntimeMessage<TResponse>(message: RuntimeMessage): Promise<TResponse> {
+  if (!hasRuntime()) {
+    throw new Error('Chrome runtime is not available in this context')
+  }
+
+  return chrome.runtime.sendMessage(message) as Promise<TResponse>
+}
 
 function canMountOnCurrentPage() {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -44,12 +58,32 @@ function ensureStyles() {
       width: 44px;
       height: 44px;
       border-radius: 999px;
-      border: 1px solid rgba(255,255,255,0.3);
-      background: linear-gradient(140deg, #0f766e, #164e63);
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      background: linear-gradient(140deg, #4f46e5, #6366f1);
       color: #fff;
-      font-weight: 700;
       cursor: pointer;
-      box-shadow: 0 14px 30px rgba(0,0,0,0.22);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+      transition: transform 0.2s, box-shadow 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .applynest-fab img {
+      width: 26px;
+      height: 26px;
+      border-radius: 4px;
+      object-fit: cover;
+    }
+
+    .applynest-fab:hover {
+      transform: scale(1.08);
+      box-shadow: 0 12px 32px rgba(99, 102, 241, 0.25);
+    }
+
+    .applynest-fab:active {
+      transform: scale(0.95);
     }
 
     .applynest-panel {
@@ -58,16 +92,18 @@ function ensureStyles() {
       bottom: 72px;
       width: 320px;
       max-height: 440px;
-      overflow: auto;
+      overflow-x: hidden;
+      overflow-y: auto;
       z-index: 2147483640;
-      border-radius: 16px;
-      border: 1px solid rgba(255,255,255,0.2);
-      background: rgba(14, 30, 40, 0.95);
-      backdrop-filter: blur(8px);
-      color: #fff;
-      font-family: Segoe UI, sans-serif;
+      border-radius: 12px;
+      border: 1px solid rgba(63, 63, 70, 0.6);
+      background: rgba(9, 9, 11, 0.96);
+      backdrop-filter: blur(12px);
+      color: #fafafa;
+      font-family: 'Sora', 'Manrope', system-ui, -apple-system, sans-serif;
       display: none;
-      padding: 12px;
+      padding: 14px;
+      box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.5);
     }
 
     .applynest-panel.open {
@@ -76,42 +112,111 @@ function ensureStyles() {
 
     .applynest-panel input {
       width: 100%;
-      border-radius: 10px;
-      border: 1px solid rgba(255,255,255,0.3);
-      background: rgba(12, 20, 28, 0.8);
-      color: #fff;
-      padding: 8px 10px;
-      margin-bottom: 8px;
+      border-radius: 8px;
+      border: 1px solid rgba(63, 63, 70, 0.6);
+      background: #18181b;
+      color: #fafafa;
+      padding: 9px 12px;
+      margin-bottom: 10px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .applynest-panel input:focus {
+      border-color: rgba(99, 102, 241, 0.6);
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
+    }
+
+    .applynest-panel input::placeholder {
+      color: #71717a;
     }
 
     .applynest-item {
       width: 100%;
-      border-radius: 10px;
-      border: 1px solid rgba(255,255,255,0.14);
-      background: rgba(10, 18, 24, 0.8);
-      color: #fff;
+      border-radius: 8px;
+      border: 1px solid rgba(63, 63, 70, 0.4);
+      background: #18181b;
+      color: #fafafa;
       cursor: pointer;
-      padding: 8px;
+      padding: 10px 12px;
       margin-bottom: 6px;
       text-align: left;
+      font-size: 13px;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .applynest-item:hover {
+      background: #27272a;
+      border-color: rgba(63, 63, 70, 0.8);
+    }
+
+    .applynest-item:active {
+      transform: scale(0.99);
+    }
+
+    .applynest-item.copied {
+      border-color: rgba(34, 197, 94, 0.4);
+      background: rgba(34, 197, 94, 0.08);
+    }
+
+    .applynest-item.copied strong {
+      color: #4ade80;
+    }
+
+    .applynest-item.copied small {
+      color: #4ade80;
+    }
+
+    .applynest-item strong {
+      color: #e4e4e7;
+      font-weight: 600;
+    }
+
+    .applynest-item small {
+      color: #a1a1aa;
+      font-size: 11px;
     }
 
     .applynest-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       margin-top: 4px;
       margin-left: 6px;
       border-radius: 999px;
-      border: 1px solid rgba(15, 118, 110, 0.6);
-      background: rgba(15, 118, 110, 0.18);
-      color: #0f766e;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      background: rgba(99, 102, 241, 0.08);
+      color: #a5b4fc;
       font-size: 11px;
-      padding: 2px 8px;
+      font-weight: 500;
+      padding: 3px 10px;
       cursor: pointer;
+      transition: all 0.15s;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    .applynest-chip:hover {
+      background: rgba(99, 102, 241, 0.18);
+      border-color: rgba(99, 102, 241, 0.5);
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
+    }
+
+    .applynest-chip:active {
+      transform: translateY(0);
     }
 
     .applynest-chip.low {
-      border-color: rgba(245, 158, 11, 0.6);
+      border-color: rgba(245, 158, 11, 0.3);
+      background: rgba(245, 158, 11, 0.08);
+      color: #fbbf24;
+    }
+
+    .applynest-chip.low:hover {
       background: rgba(245, 158, 11, 0.18);
-      color: #a16207;
+      border-color: rgba(245, 158, 11, 0.5);
+      box-shadow: 0 2px 8px rgba(245, 158, 11, 0.15);
     }
   `
 
@@ -276,7 +381,7 @@ function upsertSuggestionChip(suggestion: FieldSuggestion) {
   ) as HTMLButtonElement | null
 
   if (existing) {
-    existing.textContent = `Use ${suggestion.label}`
+    existing.textContent = `ApplyNest \u00b7 ${suggestion.label}`
     existing.className = `applynest-chip ${suggestion.confidence === 'low' ? 'low' : ''}`.trim()
     return
   }
@@ -285,8 +390,8 @@ function upsertSuggestionChip(suggestion: FieldSuggestion) {
   chip.id = chipId
   chip.setAttribute(CHIP_ATTR, suggestion.elementId)
   chip.type = 'button'
-  chip.textContent = `Use ${suggestion.label}`
   chip.className = `applynest-chip ${suggestion.confidence === 'low' ? 'low' : ''}`.trim()
+  chip.textContent = `ApplyNest · ${suggestion.label}`
 
   chip.addEventListener('click', () => {
     fillElement(element, suggestion.value)
@@ -317,7 +422,7 @@ async function searchFromPanel(query: string) {
     payload: { query }
   })
 
-  return results.slice(0, 6)
+  return results
 }
 
 function mountFloatingWidget() {
@@ -327,7 +432,11 @@ function mountFloatingWidget() {
   fab.id = 'applynest-fab'
   fab.className = 'applynest-fab'
   fab.type = 'button'
-  fab.textContent = 'AN'
+
+  const fabIcon = document.createElement('img')
+  fabIcon.src = chrome.runtime.getURL('logo.png')
+  fabIcon.alt = 'ApplyNest'
+  fab.appendChild(fabIcon)
 
   const panel = document.createElement('section')
   panel.id = 'applynest-panel'
@@ -349,13 +458,28 @@ function mountFloatingWidget() {
         button.className = 'applynest-item'
         const title = document.createElement('strong')
         title.textContent = item.label
-        const lineBreak = document.createElement('br')
-        const preview = document.createElement('small')
-        preview.textContent = item.value
-        button.append(title, lineBreak, preview)
+        button.append(title)
         button.addEventListener('click', async () => {
+          const insertResult = insertIntoFocusedField(item.value)
+
+          if (insertResult.ok) {
+            button.classList.add('copied')
+            title.textContent = '✓ Inserted'
+            setTimeout(() => {
+              button.classList.remove('copied')
+              title.textContent = item.label
+            }, 1200)
+            return
+          }
+
           try {
             await navigator.clipboard.writeText(item.value)
+            button.classList.add('copied')
+            title.textContent = '✓ Copied'
+            setTimeout(() => {
+              button.classList.remove('copied')
+              title.textContent = item.label
+            }, 1200)
           } catch (error) {
             console.debug('ApplyNest clipboard write failed', error)
           }

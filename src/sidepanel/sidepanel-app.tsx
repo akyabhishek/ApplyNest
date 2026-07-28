@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronDown, ChevronUp, Copy, PlusCircle, Search } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Copy, PlusCircle, RefreshCw, Search } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { getIconEntry } from '../shared/icon-map'
 import { sendRuntimeMessage } from '../shared/messaging'
 import type { SearchResultItem } from '../shared/types'
 
@@ -81,7 +82,11 @@ export function SidepanelApp() {
     }
   }, [userOrder])
 
-  const { data: results = [] } = useQuery({
+  const {
+    data: results = [],
+    isFetching,
+    refetch
+  } = useQuery({
     queryKey: ['sidepanel-default-results', query],
     queryFn: () =>
       sendRuntimeMessage<SearchResultItem[]>({
@@ -172,7 +177,25 @@ export function SidepanelApp() {
         })
       }
 
-      await navigator.clipboard.writeText(item.value)
+      // Try inserting directly into the active tab's focused field
+      let inserted = false
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+        if (tab?.id) {
+          const response = await chrome.tabs.sendMessage(tab.id, {
+            type: 'INSERT_VALUE_IN_FOCUSED_FIELD',
+            payload: { value: item.value }
+          })
+          inserted = response?.ok === true
+        }
+      } catch {
+        // Content script not available on this tab, fall through to clipboard
+      }
+
+      if (!inserted) {
+        await navigator.clipboard.writeText(item.value)
+      }
+
       setCopiedItemId(item.id)
       setFailedItemId(null)
       await queryClient.invalidateQueries({ queryKey: ['recent-copies'] })
@@ -199,30 +222,45 @@ export function SidepanelApp() {
       <section className="applynest-glass rounded-xl p-2">
         <header className="mb-1.5 flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">
-            <img src="/logo.png" alt="ApplyNest logo" className="h-6 w-6 rounded object-cover" />
-            <h1 className="text-xs font-semibold tracking-wide text-slate-100">ApplyNest</h1>
+            <img src="/logo.png" alt="ApplyNest logo" className="h-6 w-6 rounded-md object-cover" />
+            <h1 className="text-xs font-semibold tracking-tight text-zinc-100">ApplyNest</h1>
           </div>
-          <button
-            type="button"
-            onClick={openVaultSettings}
-            aria-label="Add or edit details"
-            title="Add or edit details"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-cyan-300/45 bg-cyan-400/15 text-cyan-100 transition hover:bg-cyan-300/25"
-          >
-            <PlusCircle className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                void refetch()
+              }}
+              disabled={isFetching}
+              aria-label="Refresh data"
+              title="Refresh data"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/[0.08] bg-zinc-900 text-zinc-300 transition-all duration-200 hover:border-white/[0.12] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+            </button>
+
+            <button
+              type="button"
+              onClick={openVaultSettings}
+              aria-label="Add or edit details"
+              title="Add or edit details"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-indigo-500/15 text-indigo-300 transition-all duration-200 hover:bg-indigo-500/25"
+            >
+              <PlusCircle className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </header>
 
-        <div className="mb-1 inline-flex rounded-md border border-white/15 bg-slate-950/35 p-0.5">
+        <div className="mb-1 inline-flex rounded-md border border-white/[0.06] bg-zinc-950/50 p-0.5">
           <button
             type="button"
             onClick={() => {
               setActiveTab('fields')
             }}
-            className={`rounded px-2 py-1 text-[10px] font-semibold transition ${
+            className={`rounded px-2 py-1 text-[10px] font-semibold transition-all duration-200 ${
               activeTab === 'fields'
-                ? 'bg-cyan-400 text-slate-950'
-                : 'text-slate-200 hover:bg-white/10'
+                ? 'bg-indigo-500 text-white'
+                : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
             Fields
@@ -233,10 +271,10 @@ export function SidepanelApp() {
               setActiveTab('templates')
               setArrangeMode(false)
             }}
-            className={`rounded px-2 py-1 text-[10px] font-semibold transition ${
+            className={`rounded px-2 py-1 text-[10px] font-semibold transition-all duration-200 ${
               activeTab === 'templates'
-                ? 'bg-emerald-400 text-slate-950'
-                : 'text-slate-200 hover:bg-white/10'
+                ? 'bg-indigo-500 text-white'
+                : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
             Templates
@@ -245,12 +283,12 @@ export function SidepanelApp() {
 
         <div className="mt-1 flex items-center gap-1">
           <label className="relative block flex-1">
-            <Search className="pointer-events-none absolute left-2 top-2 h-3 w-3 text-slate-300" />
+            <Search className="pointer-events-none absolute left-2 top-2 h-3 w-3 text-zinc-500" />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search details"
-              className="h-7 w-full rounded-md border border-white/20 bg-slate-900/70 py-1 pl-6 pr-2 text-[11px] outline-none transition focus:border-cyan-300"
+              className="h-7 w-full rounded-md border border-white/[0.08] bg-zinc-950 py-1 pl-6 pr-2 text-[11px] outline-none transition-all duration-200 placeholder:text-zinc-500 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/20"
             />
           </label>
 
@@ -264,7 +302,7 @@ export function SidepanelApp() {
               }
             }}
             aria-label="Arrange details"
-            className="h-7 rounded-md border border-white/20 bg-slate-900/70 px-1.5 text-[10px] text-slate-200 outline-none transition focus:border-cyan-300"
+            className="h-7 rounded-md border border-white/[0.08] bg-zinc-950 px-1.5 text-[10px] text-zinc-300 outline-none transition-all duration-200 focus:border-indigo-400"
           >
             <option value="relevance">Relevance</option>
             <option value="label_asc">A-Z</option>
@@ -279,7 +317,7 @@ export function SidepanelApp() {
             <button
               type="button"
               onClick={() => setArrangeMode((prev) => !prev)}
-              className="h-6 rounded-md border border-cyan-300/45 bg-cyan-400/15 px-2 text-[10px] font-medium text-cyan-100"
+              className="h-6 rounded-md bg-indigo-500/15 px-2 text-[10px] font-medium text-indigo-300 transition-all duration-200 hover:bg-indigo-500/25"
             >
               {arrangeMode ? 'Done Arranging' : 'Arrange'}
             </button>
@@ -293,20 +331,29 @@ export function SidepanelApp() {
                 type="button"
                 onClick={() => handleCopy(item)}
                 title={item.label}
-                className={`flex h-11 w-full items-center justify-between gap-1 rounded-md border px-1.5 text-left transition ${
+                className={`flex h-11 w-full items-center justify-between gap-1 rounded-md border px-1.5 text-left transition-all duration-200 ${
                   copiedItemId === item.id
-                    ? 'border-emerald-300/70 bg-emerald-400/20'
+                    ? 'border-emerald-400/40 bg-emerald-500/10'
                     : failedItemId === item.id
-                      ? 'border-rose-300/70 bg-rose-400/20'
-                      : 'border-white/10 bg-slate-900/50 hover:border-cyan-200/50 hover:bg-slate-900/70'
+                      ? 'border-rose-400/40 bg-rose-500/10'
+                      : 'border-white/[0.06] bg-zinc-900/50 hover:border-white/[0.12] hover:bg-zinc-900/80'
                 }`}
               >
-                <span className="min-w-0">
-                  <span className="block truncate text-xs font-semibold leading-none text-slate-100">
-                    {item.label}
-                  </span>
-                  <span className="mt-0.5 block truncate text-[9px] leading-none text-slate-300/90">
-                    {item.value}
+                <span className="flex min-w-0 items-center gap-1">
+                  {item.icon &&
+                    (() => {
+                      const entry = getIconEntry(item.icon)
+                      if (!entry) return null
+                      const Icon = entry.component
+                      return <Icon className="h-3 w-3 shrink-0 text-indigo-400" />
+                    })()}
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-semibold leading-none text-zinc-100">
+                      {item.label}
+                    </span>
+                    <span className="mt-0.5 block truncate text-[9px] leading-none text-zinc-400">
+                      {item.value}
+                    </span>
                   </span>
                 </span>
                 {arrangeMode && item.fieldId ? (
@@ -320,7 +367,7 @@ export function SidepanelApp() {
                         moveInUserOrder(item.fieldId as string, 'up')
                       }}
                       disabled={(userOrderIndexMap.get(item.fieldId) ?? 0) === 0}
-                      className="inline-flex h-3.5 w-3.5 items-center justify-center rounded border border-white/15 text-slate-200 disabled:opacity-40"
+                      className="inline-flex h-3.5 w-3.5 items-center justify-center rounded border border-white/[0.08] text-zinc-300 disabled:opacity-40"
                     >
                       <ChevronUp className="h-2.5 w-2.5" />
                     </button>
@@ -336,17 +383,17 @@ export function SidepanelApp() {
                         (userOrderIndexMap.get(item.fieldId) ?? effectiveUserOrder.length - 1) >=
                         effectiveUserOrder.length - 1
                       }
-                      className="inline-flex h-3.5 w-3.5 items-center justify-center rounded border border-white/15 text-slate-200 disabled:opacity-40"
+                      className="inline-flex h-3.5 w-3.5 items-center justify-center rounded border border-white/[0.08] text-zinc-300 disabled:opacity-40"
                     >
                       <ChevronDown className="h-2.5 w-2.5" />
                     </button>
                   </span>
                 ) : copiedItemId === item.id ? (
-                  <Check className="h-3 w-3 shrink-0 text-emerald-200" />
+                  <Check className="h-3 w-3 shrink-0 text-emerald-400" />
                 ) : (
                   <Copy
                     className={`h-3 w-3 shrink-0 ${
-                      failedItemId === item.id ? 'text-rose-200' : 'text-cyan-200/85'
+                      failedItemId === item.id ? 'text-rose-400' : 'text-zinc-500'
                     }`}
                   />
                 )}
@@ -354,12 +401,12 @@ export function SidepanelApp() {
             </li>
           ))}
           {!topResults.length && (
-            <li className="col-span-2 rounded-md border border-white/10 bg-slate-900/40 px-2 py-1.5 text-[11px] text-slate-300">
+            <li className="col-span-2 rounded-md border border-white/[0.06] bg-zinc-900/40 px-2 py-1.5 text-[11px] text-zinc-400">
               No matching details found.
               <button
                 type="button"
                 onClick={openVaultSettings}
-                className="ml-1 inline text-cyan-200 underline decoration-cyan-300/60 underline-offset-2"
+                className="ml-1 inline text-indigo-400 underline decoration-indigo-400/40 underline-offset-2"
               >
                 Add or edit details
               </button>

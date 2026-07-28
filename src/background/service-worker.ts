@@ -2,12 +2,15 @@ import {
   addField,
   clearAllFields,
   ensureState,
+  getCustomSites,
   getRecent,
   getState,
   mapCandidates,
   removeField,
   recordCopy,
+  reorderFields,
   searchAll,
+  setCustomSites,
   setState,
   updateField
 } from '../shared/storage'
@@ -20,20 +23,59 @@ type RequestMessage =
   | { type: 'GET_RECENT' }
   | {
       type: 'ADD_FIELD'
-      payload: { label: string; key: string; value: string; category: FieldCategory }
+      payload: { label: string; key: string; value: string; category: FieldCategory; icon?: string }
     }
   | {
       type: 'UPDATE_FIELD'
-      payload: { id: string; label: string; key: string; value: string; category: FieldCategory }
+      payload: {
+        id: string
+        label: string
+        key: string
+        value: string
+        category: FieldCategory
+        icon?: string
+      }
     }
   | { type: 'REMOVE_FIELD'; payload: { id: string } }
   | { type: 'CLEAR_ALL_FIELDS' }
   | { type: 'IMPORT_STATE'; payload: { state: ApplyNestState } }
   | { type: 'FORM_DETECTED'; payload: { candidates: DetectedFieldCandidate[] } }
   | { type: 'TOGGLE_SIDE_PANEL' }
+  | { type: 'GET_CUSTOM_SITES' }
+  | { type: 'SET_CUSTOM_SITES'; payload: { sites: string[] } }
+  | { type: 'REORDER_FIELDS'; payload: { orderedIds: string[] } }
+
+const DYNAMIC_SCRIPT_ID = 'applynest-custom-sites'
+
+async function registerCustomSiteScripts() {
+  const sites = await getCustomSites()
+
+  try {
+    await chrome.scripting.unregisterContentScripts({ ids: [DYNAMIC_SCRIPT_ID] })
+  } catch {
+    // Script not registered yet, ignore
+  }
+
+  if (!sites.length) return
+
+  const patterns = sites.map((site) => {
+    const cleaned = site.replace(/^https?:\/\//, '').replace(/\/+$/, '')
+    return `*://*.${cleaned}/*`
+  })
+
+  await chrome.scripting.registerContentScripts([
+    {
+      id: DYNAMIC_SCRIPT_ID,
+      matches: patterns,
+      js: ['assets/content.js'],
+      runAt: 'document_idle'
+    }
+  ])
+}
 
 chrome.runtime.onInstalled.addListener(async () => {
   await ensureState()
+  await registerCustomSiteScripts()
 
   if (chrome.sidePanel?.setPanelBehavior) {
     await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
@@ -121,6 +163,22 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
           await openPanelForTab(sender.tab.id)
         }
         sendResponse({ ok: true })
+        break
+      }
+      case 'GET_CUSTOM_SITES': {
+        const sites = await getCustomSites()
+        sendResponse(sites)
+        break
+      }
+      case 'SET_CUSTOM_SITES': {
+        await setCustomSites(message.payload.sites)
+        await registerCustomSiteScripts()
+        sendResponse({ ok: true })
+        break
+      }
+      case 'REORDER_FIELDS': {
+        const result = await reorderFields(message.payload.orderedIds)
+        sendResponse(result)
         break
       }
       default: {

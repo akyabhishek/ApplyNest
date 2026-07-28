@@ -9,6 +9,7 @@ export interface VaultField {
   value: string
   category: FieldCategory
   aliases: string[]
+  icon?: string
 }
 
 export interface CoverLetterTemplate {
@@ -37,6 +38,7 @@ export interface SearchResultItem {
   value: string
   category: FieldCategory | 'template'
   fieldId?: string
+  icon?: string
 }
 
 export interface DetectedFieldCandidate {

@@ -90,7 +90,8 @@ export async function addField(
     ...newField,
     key: resolvedKey,
     id: crypto.randomUUID(),
-    aliases: [newField.label.toLowerCase()]
+    aliases: [newField.label.toLowerCase()],
+    icon: newField.icon
   }
 
   const nextState = { ...state, fields: [field, ...state.fields] }
@@ -99,7 +100,7 @@ export async function addField(
 }
 
 export async function updateField(
-  updatedField: Pick<VaultField, 'id' | 'label' | 'key' | 'value' | 'category'>
+  updatedField: Pick<VaultField, 'id' | 'label' | 'key' | 'value' | 'category'> & { icon?: string }
 ): Promise<ApplyNestState> {
   const state = await getState()
   const resolvedKey = updatedField.key.trim()
@@ -117,6 +118,7 @@ export async function updateField(
       key: resolvedKey,
       value: updatedField.value,
       category: updatedField.category,
+      icon: updatedField.icon,
       aliases: Array.from(new Set([updatedField.label.toLowerCase(), ...field.aliases]))
     }
   })
@@ -152,6 +154,19 @@ export async function clearAllFields(): Promise<ApplyNestState> {
   return nextState
 }
 
+export async function reorderFields(orderedIds: string[]): Promise<ApplyNestState> {
+  const state = await getState()
+  const fieldMap = new Map(state.fields.map((f) => [f.id, f]))
+  const reordered = orderedIds.map((id) => fieldMap.get(id)).filter(Boolean) as VaultField[]
+  // Append any fields not in orderedIds (safety net)
+  for (const field of state.fields) {
+    if (!orderedIds.includes(field.id)) reordered.push(field)
+  }
+  const nextState = { ...state, fields: reordered }
+  await setState(nextState)
+  return nextState
+}
+
 export async function searchAll(query: string): Promise<SearchResultItem[]> {
   const state = await getState()
   const normalized = query.trim().toLowerCase()
@@ -163,6 +178,7 @@ export async function searchAll(query: string): Promise<SearchResultItem[]> {
       value: field.value,
       category: field.category,
       fieldId: field.id,
+      icon: field.icon,
       score: normalized ? fieldScore(normalized, field) : 10
     }))
     .filter((item) => item.score > 0)
@@ -191,7 +207,7 @@ export async function searchAll(query: string): Promise<SearchResultItem[]> {
       }
 
       if ('fieldId' in item) {
-        return { ...base, fieldId: item.fieldId }
+        return { ...base, fieldId: item.fieldId, icon: item.icon }
       }
 
       return base
@@ -269,4 +285,25 @@ export async function mapCandidates(
       } as FieldSuggestion
     })
     .filter((item): item is FieldSuggestion => Boolean(item))
+}
+
+const CUSTOM_SITES_KEY = 'applynest_custom_sites'
+
+export async function getCustomSites(): Promise<string[]> {
+  if (hasChromeStorage()) {
+    const stored = await chrome.storage.local.get(CUSTOM_SITES_KEY)
+    return (stored[CUSTOM_SITES_KEY] as string[] | undefined) ?? []
+  }
+
+  const fallback = localStorage.getItem(CUSTOM_SITES_KEY)
+  return fallback ? (JSON.parse(fallback) as string[]) : []
+}
+
+export async function setCustomSites(sites: string[]): Promise<void> {
+  if (hasChromeStorage()) {
+    await chrome.storage.local.set({ [CUSTOM_SITES_KEY]: sites })
+    return
+  }
+
+  localStorage.setItem(CUSTOM_SITES_KEY, JSON.stringify(sites))
 }

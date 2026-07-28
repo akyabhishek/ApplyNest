@@ -2,25 +2,63 @@
 
 :root {
   color-scheme: dark;
-  font-family: 'Sora', 'Manrope', 'Segoe UI', sans-serif;
+  font-family: 'Sora', 'Manrope', system-ui, -apple-system, sans-serif;
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --accent-muted: rgba(99, 102, 241, 0.15);
 }
 
 body {
   margin: 0;
   min-width: 320px;
-  background:
-    radial-gradient(circle at 10% 20%, rgba(42, 157, 143, 0.24), transparent 45%),
-    radial-gradient(circle at 80% 0%, rgba(244, 162, 97, 0.22), transparent 40%),
-    linear-gradient(165deg, #0b1f2a 0%, #102a3a 40%, #13212b 100%);
-  color: #f6f8fa;
+  background: #09090b;
+  background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.12), transparent);
+  color: #fafafa;
+  letter-spacing: -0.01em;
 }
+
+/* Light theme */
+[data-theme="light"] body,
+[data-theme="light"] {
+  background: #f8f9fc;
+  background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.06), transparent);
+  color: #18181b;
+  color-scheme: light;
+}
+
+[data-theme="light"] .applynest-glass {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .text-white { color: #18181b; }
+[data-theme="light"] .text-zinc-300 { color: #3f3f46; }
+[data-theme="light"] .text-zinc-400 { color: #52525b; }
+[data-theme="light"] .text-zinc-500 { color: #71717a; }
+[data-theme="light"] .bg-zinc-900\/50 { background: rgba(255, 255, 255, 0.7); }
+[data-theme="light"] .bg-zinc-900\/92 { background: rgba(255, 255, 255, 0.92); }
+[data-theme="light"] .bg-zinc-950 { background: #ffffff; }
+[data-theme="light"] .bg-zinc-950\/50 { background: rgba(255, 255, 255, 0.5); }
+[data-theme="light"] .bg-zinc-950\/60 { background: rgba(255, 255, 255, 0.6); }
+[data-theme="light"] .bg-zinc-900 { background: #ffffff; }
+[data-theme="light"] .border-white\/6 { border-color: rgba(0, 0, 0, 0.08); }
+[data-theme="light"] .border-white\/8 { border-color: rgba(0, 0, 0, 0.1); }
+[data-theme="light"] .border-white\/12 { border-color: rgba(0, 0, 0, 0.14); }
+[data-theme="light"] .bg-white\/5 { background: rgba(0, 0, 0, 0.04); }
+[data-theme="light"] .bg-white\/8 { background: rgba(0, 0, 0, 0.06); }
+[data-theme="light"] .hover\:bg-white\/5:hover { background: rgba(0, 0, 0, 0.04); }
+[data-theme="light"] .hover\:bg-white\/8:hover { background: rgba(0, 0, 0, 0.06); }
+[data-theme="light"] .hover\:border-white\/12:hover { border-color: rgba(0, 0, 0, 0.14); }
 
 * {
   box-sizing: border-box;
 }
 
 .applynest-glass {
-  background: rgba(14, 30, 40, 0.58);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(24, 24, 27, 0.92);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.4);
 }
