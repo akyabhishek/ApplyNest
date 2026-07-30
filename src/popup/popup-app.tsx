@@ -159,6 +159,10 @@ export function PopupApp() {
             {!recent.length && <li className="text-zinc-500">Nothing copied yet.</li>}
           </ul>
           {feedback && <p className="mt-2 text-xs text-emerald-400">{feedback}</p>}
+          <p className="mt-2 text-[10px] text-zinc-600">
+            Side panel:{' '}
+            <kbd className="rounded bg-zinc-800 px-1 py-0.5 font-mono text-zinc-400">Alt+J</kbd>
+          </p>
         </footer>
       </section>
     </main>

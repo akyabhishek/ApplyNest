@@ -1,5 +1,14 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronDown, ChevronUp, Copy, PlusCircle, RefreshCw, Search } from 'lucide-react'
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Globe,
+  PlusCircle,
+  RefreshCw,
+  Search
+} from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { getIconEntry } from '../shared/icon-map'
 import { sendRuntimeMessage } from '../shared/messaging'
@@ -9,6 +18,9 @@ type SortOption = 'relevance' | 'label_asc' | 'label_desc' | 'category' | 'user_
 
 const SORT_STORAGE_KEY = 'applynest_sidepanel_sort'
 const USER_ORDER_STORAGE_KEY = 'applynest_sidepanel_user_order'
+
+const isMac = navigator.platform.toUpperCase().includes('MAC')
+const sidePanelShortcut = isMac ? 'Option+J' : 'Alt+J'
 
 const isSortOption = (value: string): value is SortOption => {
   return (
@@ -64,6 +76,7 @@ export function SidepanelApp() {
   const [sortBy, setSortBy] = useState<SortOption>(getInitialSortBy)
   const [arrangeMode, setArrangeMode] = useState(false)
   const [userOrder, setUserOrder] = useState<string[]>(getInitialUserOrder)
+  const [addSiteStatus, setAddSiteStatus] = useState<'idle' | 'added' | 'exists' | 'error'>('idle')
   const queryClient = useQueryClient()
 
   useEffect(() => {
@@ -215,6 +228,35 @@ export function SidepanelApp() {
     if (typeof chrome !== 'undefined' && chrome.runtime?.openOptionsPage) {
       await chrome.runtime.openOptionsPage()
     }
+  }
+
+  const addCurrentSite = async () => {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+      if (!tab?.url) {
+        setAddSiteStatus('error')
+        return
+      }
+      const hostname = new URL(tab.url).hostname
+      if (!hostname) {
+        setAddSiteStatus('error')
+        return
+      }
+
+      const current = await sendRuntimeMessage<string[]>({ type: 'GET_CUSTOM_SITES' })
+      if (current.includes(hostname)) {
+        setAddSiteStatus('exists')
+      } else {
+        await sendRuntimeMessage({
+          type: 'SET_CUSTOM_SITES',
+          payload: { sites: [...current, hostname] }
+        })
+        setAddSiteStatus('added')
+      }
+    } catch {
+      setAddSiteStatus('error')
+    }
+    window.setTimeout(() => setAddSiteStatus('idle'), 2000)
   }
 
   return (
@@ -413,6 +455,37 @@ export function SidepanelApp() {
             </li>
           )}
         </ul>
+
+        <div className="mt-2 flex items-center justify-between">
+          <p className="text-[9px] text-zinc-600">
+            Open panel:{' '}
+            <kbd className="rounded bg-zinc-800 px-1 py-0.5 font-mono text-zinc-500">
+              {sidePanelShortcut}
+            </kbd>
+          </p>
+          <button
+            type="button"
+            onClick={() => void addCurrentSite()}
+            className={`flex items-center gap-1 text-[9px] transition-colors ${
+              addSiteStatus === 'added'
+                ? 'text-emerald-400'
+                : addSiteStatus === 'exists'
+                  ? 'text-amber-400'
+                  : addSiteStatus === 'error'
+                    ? 'text-rose-400'
+                    : 'text-zinc-600 hover:text-zinc-400'
+            }`}
+          >
+            <Globe className="h-2.5 w-2.5" />
+            {addSiteStatus === 'added'
+              ? 'Site added!'
+              : addSiteStatus === 'exists'
+                ? 'Already added'
+                : addSiteStatus === 'error'
+                  ? 'Could not detect'
+                  : 'Add site to quick panel'}
+          </button>
+        </div>
       </section>
     </main>
   )

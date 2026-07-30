@@ -82,16 +82,35 @@ chrome.runtime.onInstalled.addListener(async () => {
   }
 })
 
+// Resets on service-worker restart; first press after restart will always open
+const panelOpenTabs = new Set<number>()
+
 async function openPanelForTab(tabId: number) {
   if (!chrome.sidePanel?.open) return
-
-  await chrome.sidePanel.setOptions({
-    tabId,
-    path: 'sidepanel.html',
-    enabled: true
-  })
   await chrome.sidePanel.open({ tabId })
+  panelOpenTabs.add(tabId)
 }
+
+async function togglePanelForTab(tabId: number) {
+  if (!chrome.sidePanel?.open) return
+  if (panelOpenTabs.has(tabId)) {
+    try {
+      await (chrome.sidePanel as unknown as { close(o: { tabId: number }): Promise<void> }).close({
+        tabId
+      })
+    } catch {
+      // Already closed by user
+    }
+    panelOpenTabs.delete(tabId)
+  } else {
+    await chrome.sidePanel.open({ tabId })
+    panelOpenTabs.add(tabId)
+  }
+}
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  panelOpenTabs.delete(tabId)
+})
 
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab.id) return
@@ -100,7 +119,7 @@ chrome.action.onClicked.addListener(async (tab) => {
 
 chrome.commands.onCommand.addListener(async (command, tab) => {
   if (command === 'toggle-side-panel' && tab?.id) {
-    await openPanelForTab(tab.id)
+    await togglePanelForTab(tab.id)
   }
 })
 
