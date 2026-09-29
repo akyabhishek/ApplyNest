@@ -16,7 +16,7 @@ import {
   rectSortingStrategy
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Check, ChevronDown, GripVertical, Search, Settings } from 'lucide-react'
+import { Check, ChevronDown, GripVertical, Search, Settings, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEventHandler, FormEvent } from 'react'
 import { sendRuntimeMessage } from '../shared/messaging'
@@ -507,6 +507,11 @@ export function OptionsApp() {
   const customSitesQuery = useQuery({
     queryKey: ['custom-sites'],
     queryFn: () => sendRuntimeMessage<string[]>({ type: 'GET_CUSTOM_SITES' })
+  })
+
+  const enableEverywhereQuery = useQuery({
+    queryKey: ['enable-everywhere'],
+    queryFn: () => sendRuntimeMessage<{ enabled: boolean }>({ type: 'GET_ENABLE_EVERYWHERE' })
   })
 
   const addFieldMutation = useMutation({
@@ -1588,8 +1593,27 @@ export function OptionsApp() {
       )}
 
       {settingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <section className="w-full max-w-lg rounded-xl border border-white/8 bg-zinc-900 px-6 py-6 shadow-2xl">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => {
+            setSettingsOpen(false)
+            setSettingsMessage('')
+          }}
+        >
+          <section
+            className="relative w-full max-w-lg max-h-[calc(100vh-2rem)] overflow-y-auto rounded-xl border border-white/8 bg-zinc-900 px-6 py-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setSettingsOpen(false)
+                setSettingsMessage('')
+              }}
+              className="absolute right-4 top-4 rounded-md p-1 text-zinc-400 transition-colors hover:bg-white/8 hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
             <h2 className="text-center text-lg font-semibold text-white">Settings</h2>
 
             {settingsMessage && (
@@ -1699,6 +1723,46 @@ export function OptionsApp() {
             <div className="mt-5 border-t border-white/6 pt-5">
               <div className="flex items-center justify-between">
                 <div>
+                  <h3 className="text-sm font-medium text-white">Quick Panel Everywhere</h3>
+                  <p className="mt-0.5 text-xs text-zinc-400">
+                    Show the floating button and smart suggestions on every website, not just job
+                    portals.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={enableEverywhereQuery.data?.enabled ?? false}
+                  onClick={() => {
+                    const next = !(enableEverywhereQuery.data?.enabled ?? false)
+                    void sendRuntimeMessage({
+                      type: 'SET_ENABLE_EVERYWHERE',
+                      payload: { enabled: next }
+                    }).then(() => {
+                      void queryClient.invalidateQueries({ queryKey: ['enable-everywhere'] })
+                      setSettingsMessage(
+                        next
+                          ? 'Quick panel enabled on all sites'
+                          : 'Quick panel limited to job portals'
+                      )
+                    })
+                  }}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${
+                    enableEverywhereQuery.data?.enabled ? 'bg-indigo-500' : 'bg-zinc-700'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                      enableEverywhereQuery.data?.enabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-5 border-t border-white/6 pt-5">
+              <div className="flex items-center justify-between">
+                <div>
                   <h3 className="text-sm font-medium text-white">Appearance</h3>
                   <p className="mt-0.5 text-xs text-zinc-400">Color theme</p>
                 </div>
@@ -1795,19 +1859,6 @@ export function OptionsApp() {
                   Delete...
                 </button>
               </div>
-            </div>
-
-            <div className="mt-5 flex justify-end">
-              <button
-                type="button"
-                onClick={() => {
-                  setSettingsOpen(false)
-                  setSettingsMessage('')
-                }}
-                className="rounded-lg bg-white/5 px-3 py-1.5 text-xs text-zinc-300 transition-colors hover:bg-white/8"
-              >
-                Close
-              </button>
             </div>
           </section>
         </div>

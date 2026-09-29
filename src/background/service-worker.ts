@@ -3,6 +3,7 @@ import {
   clearAllFields,
   ensureState,
   getCustomSites,
+  getEnableEverywhere,
   getRecent,
   getState,
   mapCandidates,
@@ -11,6 +12,7 @@ import {
   reorderFields,
   searchAll,
   setCustomSites,
+  setEnableEverywhere,
   setState,
   updateField
 } from '../shared/storage'
@@ -44,8 +46,32 @@ type RequestMessage =
   | { type: 'GET_CUSTOM_SITES' }
   | { type: 'SET_CUSTOM_SITES'; payload: { sites: string[] } }
   | { type: 'REORDER_FIELDS'; payload: { orderedIds: string[] } }
+  | { type: 'GET_ENABLE_EVERYWHERE' }
+  | { type: 'SET_ENABLE_EVERYWHERE'; payload: { enabled: boolean } }
 
 const DYNAMIC_SCRIPT_ID = 'applynest-custom-sites'
+const EVERYWHERE_SCRIPT_ID = 'applynest-everywhere'
+
+async function registerEverywhereScript() {
+  const enabled = await getEnableEverywhere()
+
+  try {
+    await chrome.scripting.unregisterContentScripts({ ids: [EVERYWHERE_SCRIPT_ID] })
+  } catch {
+    // Script not registered yet, ignore
+  }
+
+  if (!enabled) return
+
+  await chrome.scripting.registerContentScripts([
+    {
+      id: EVERYWHERE_SCRIPT_ID,
+      matches: ['<all_urls>'],
+      js: ['assets/content.js'],
+      runAt: 'document_idle'
+    }
+  ])
+}
 
 async function registerCustomSiteScripts() {
   const sites = await getCustomSites()
@@ -76,6 +102,7 @@ async function registerCustomSiteScripts() {
 chrome.runtime.onInstalled.addListener(async () => {
   await ensureState()
   await registerCustomSiteScripts()
+  await registerEverywhereScript()
 
   if (chrome.sidePanel?.setPanelBehavior) {
     await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
@@ -198,6 +225,17 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
       case 'REORDER_FIELDS': {
         const result = await reorderFields(message.payload.orderedIds)
         sendResponse(result)
+        break
+      }
+      case 'GET_ENABLE_EVERYWHERE': {
+        const enabled = await getEnableEverywhere()
+        sendResponse({ enabled })
+        break
+      }
+      case 'SET_ENABLE_EVERYWHERE': {
+        await setEnableEverywhere(message.payload.enabled)
+        await registerEverywhereScript()
+        sendResponse({ ok: true })
         break
       }
       default: {

@@ -307,3 +307,23 @@ export async function setCustomSites(sites: string[]): Promise<void> {
 
   localStorage.setItem(CUSTOM_SITES_KEY, JSON.stringify(sites))
 }
+
+const ENABLE_EVERYWHERE_KEY = 'applynest_enable_everywhere'
+
+export async function getEnableEverywhere(): Promise<boolean> {
+  if (hasChromeStorage()) {
+    const stored = await chrome.storage.local.get(ENABLE_EVERYWHERE_KEY)
+    return (stored[ENABLE_EVERYWHERE_KEY] as boolean | undefined) ?? false
+  }
+
+  return localStorage.getItem(ENABLE_EVERYWHERE_KEY) === 'true'
+}
+
+export async function setEnableEverywhere(enabled: boolean): Promise<void> {
+  if (hasChromeStorage()) {
+    await chrome.storage.local.set({ [ENABLE_EVERYWHERE_KEY]: enabled })
+    return
+  }
+
+  localStorage.setItem(ENABLE_EVERYWHERE_KEY, JSON.stringify(enabled))
+}
