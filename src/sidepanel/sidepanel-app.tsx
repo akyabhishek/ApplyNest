@@ -11,8 +11,13 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { getIconEntry } from '../shared/icon-map'
+import {
+  insertValueIntoFocusedField,
+  probeFocusedField,
+  type FocusedFieldProbe
+} from '../shared/insert'
 import { sendRuntimeMessage } from '../shared/messaging'
-import type { SearchResultItem } from '../shared/types'
+import type { InsertValueResult, SearchResultItem } from '../shared/types'
 
 type SortOption = 'relevance' | 'label_asc' | 'label_desc' | 'category' | 'user_order'
 
@@ -70,14 +75,24 @@ const mergeUserOrderWithActiveFields = (order: string[], activeFieldIds: string[
 
 export function SidepanelApp() {
   const [query, setQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState(query)
   const [copiedItemId, setCopiedItemId] = useState<string | null>(null)
   const [failedItemId, setFailedItemId] = useState<string | null>(null)
+  const [copyFeedback, setCopyFeedback] = useState<{ itemId: string; message: string } | null>(null)
   const [activeTab, setActiveTab] = useState<'fields' | 'templates'>('fields')
   const [sortBy, setSortBy] = useState<SortOption>(getInitialSortBy)
   const [arrangeMode, setArrangeMode] = useState(false)
   const [userOrder, setUserOrder] = useState<string[]>(getInitialUserOrder)
   const [addSiteStatus, setAddSiteStatus] = useState<'idle' | 'added' | 'exists' | 'error'>('idle')
   const queryClient = useQueryClient()
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedQuery(query)
+    }, 200)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [query])
 
   useEffect(() => {
     try {
@@ -100,11 +115,11 @@ export function SidepanelApp() {
     isFetching,
     refetch
   } = useQuery({
-    queryKey: ['sidepanel-default-results', query],
+    queryKey: ['sidepanel-default-results', debouncedQuery],
     queryFn: () =>
       sendRuntimeMessage<SearchResultItem[]>({
         type: 'SEARCH_ITEMS',
-        payload: { query }
+        payload: { query: debouncedQuery }
       })
   })
 
@@ -190,36 +205,71 @@ export function SidepanelApp() {
         })
       }
 
-      // Try inserting directly into the active tab's focused field
-      let inserted = false
+      let insertResult: InsertValueResult = { ok: false, reason: 'NO_ACTIVE_TAB' }
       try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
         if (tab?.id) {
-          const response = await chrome.tabs.sendMessage(tab.id, {
-            type: 'INSERT_VALUE_IN_FOCUSED_FIELD',
-            payload: { value: item.value }
+          const frameResults = await chrome.scripting.executeScript<[], FocusedFieldProbe>({
+            target: { tabId: tab.id, allFrames: true },
+            func: probeFocusedField
           })
-          inserted = response?.ok === true
+
+          const candidateFrames = frameResults.filter((frame) => frame.result?.hasTarget)
+          const focusedFrames = candidateFrames.filter((frame) => frame.result?.hasFocus)
+          const targetFrame =
+            candidateFrames.length === 1
+              ? candidateFrames[0]
+              : focusedFrames.length === 1
+                ? focusedFrames[0]
+                : undefined
+
+          if (!targetFrame) {
+            insertResult = { ok: false, reason: 'NO_TARGET' }
+          } else {
+            const insertionResults = await chrome.scripting.executeScript<
+              [string],
+              InsertValueResult
+            >({
+              target: { tabId: tab.id, frameIds: [targetFrame.frameId] },
+              func: insertValueIntoFocusedField,
+              args: [item.value]
+            })
+            insertResult = insertionResults[0]?.result ?? {
+              ok: false,
+              reason: 'CONTENT_UNAVAILABLE'
+            }
+          }
         }
       } catch {
-        // Content script not available on this tab, fall through to clipboard
+        insertResult = { ok: false, reason: 'CONTENT_UNAVAILABLE' }
       }
 
-      if (!inserted) {
+      if (!insertResult.ok) {
         await navigator.clipboard.writeText(item.value)
       }
 
       setCopiedItemId(item.id)
       setFailedItemId(null)
+      const feedbackMessage = insertResult.ok
+        ? 'Inserted into page.'
+        : insertResult.reason === 'NO_TARGET'
+          ? 'Could not insert into a compatible field; copied to clipboard.'
+          : insertResult.reason === 'NO_ACTIVE_TAB'
+            ? 'No active page; copied to clipboard.'
+            : 'This page does not allow insertion; copied to clipboard.'
+      setCopyFeedback({ itemId: item.id, message: feedbackMessage })
       await queryClient.invalidateQueries({ queryKey: ['recent-copies'] })
 
       window.setTimeout(() => {
         setCopiedItemId((prev) => (prev === item.id ? null : prev))
+        setCopyFeedback((prev) => (prev?.itemId === item.id ? null : prev))
       }, 1200)
     } catch {
       setFailedItemId(item.id)
+      setCopyFeedback({ itemId: item.id, message: 'Could not insert or copy this value.' })
       window.setTimeout(() => {
         setFailedItemId((prev) => (prev === item.id ? null : prev))
+        setCopyFeedback((prev) => (prev?.itemId === item.id ? null : prev))
       }, 1500)
     }
   }
@@ -260,8 +310,8 @@ export function SidepanelApp() {
   }
 
   return (
-    <main className="min-h-screen p-1.5 text-white sm:p-2">
-      <section className="applynest-glass rounded-xl p-2">
+    <main className="min-h-screen p-1 text-white sm:p-1.5">
+      <section className="applynest-glass rounded-xl p-1.5">
         <header className="mb-1.5 flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">
             <img src="/logo.png" alt="ApplyNest logo" className="h-6 w-6 rounded-md object-cover" />
@@ -276,7 +326,7 @@ export function SidepanelApp() {
               disabled={isFetching}
               aria-label="Refresh data"
               title="Refresh data"
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/[0.08] bg-zinc-900 text-zinc-300 transition-all duration-200 hover:border-white/[0.12] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/[0.08] bg-zinc-900 text-zinc-300 transition-all duration-200 hover:border-white/[0.12] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
             </button>
@@ -286,7 +336,7 @@ export function SidepanelApp() {
               onClick={openVaultSettings}
               aria-label="Add or edit details"
               title="Add or edit details"
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-indigo-500/15 text-indigo-300 transition-all duration-200 hover:bg-indigo-500/25"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-indigo-500/15 text-indigo-300 transition-all duration-200 hover:bg-indigo-500/25"
             >
               <PlusCircle className="h-3.5 w-3.5" />
             </button>
@@ -299,7 +349,7 @@ export function SidepanelApp() {
             onClick={() => {
               setActiveTab('fields')
             }}
-            className={`rounded px-2 py-1 text-[10px] font-semibold transition-all duration-200 ${
+            className={`min-h-8 rounded px-2 text-[11px] font-semibold transition-all duration-200 ${
               activeTab === 'fields'
                 ? 'bg-indigo-500 text-white'
                 : 'text-zinc-400 hover:text-zinc-200'
@@ -313,7 +363,7 @@ export function SidepanelApp() {
               setActiveTab('templates')
               setArrangeMode(false)
             }}
-            className={`rounded px-2 py-1 text-[10px] font-semibold transition-all duration-200 ${
+            className={`min-h-8 rounded px-2 text-[11px] font-semibold transition-all duration-200 ${
               activeTab === 'templates'
                 ? 'bg-indigo-500 text-white'
                 : 'text-zinc-400 hover:text-zinc-200'
@@ -325,12 +375,12 @@ export function SidepanelApp() {
 
         <div className="mt-1 flex items-center gap-1">
           <label className="relative block flex-1">
-            <Search className="pointer-events-none absolute left-2 top-2 h-3 w-3 text-zinc-500" />
+            <Search className="pointer-events-none absolute left-2 top-2.5 h-3.5 w-3.5 text-zinc-500" />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search details"
-              className="h-7 w-full rounded-md border border-white/[0.08] bg-zinc-950 py-1 pl-6 pr-2 text-[11px] outline-none transition-all duration-200 placeholder:text-zinc-500 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/20"
+              className="h-8 w-full rounded-md border border-white/[0.08] bg-zinc-950 py-1 pl-6 pr-2 text-xs outline-none transition-all duration-200 placeholder:text-zinc-500 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/20"
             />
           </label>
 
@@ -344,7 +394,7 @@ export function SidepanelApp() {
               }
             }}
             aria-label="Arrange details"
-            className="h-7 rounded-md border border-white/[0.08] bg-zinc-950 px-1.5 text-[10px] text-zinc-300 outline-none transition-all duration-200 focus:border-indigo-400"
+            className="h-8 rounded-md border border-white/[0.08] bg-zinc-950 px-1.5 text-[11px] text-zinc-300 outline-none transition-all duration-200 focus:border-indigo-400"
           >
             <option value="relevance">Relevance</option>
             <option value="label_asc">A-Z</option>
@@ -359,91 +409,90 @@ export function SidepanelApp() {
             <button
               type="button"
               onClick={() => setArrangeMode((prev) => !prev)}
-              className="h-6 rounded-md bg-indigo-500/15 px-2 text-[10px] font-medium text-indigo-300 transition-all duration-200 hover:bg-indigo-500/25"
+              className="min-h-8 rounded-md bg-indigo-500/15 px-2 text-xs font-medium text-indigo-300 transition-all duration-200 hover:bg-indigo-500/25"
             >
               {arrangeMode ? 'Done Arranging' : 'Arrange'}
             </button>
           </div>
         )}
 
-        <ul className="mt-1.5 grid grid-cols-2 gap-1">
-          {topResults.map((item) => (
-            <li key={item.id}>
-              <button
-                type="button"
-                onClick={() => handleCopy(item)}
-                title={item.label}
-                className={`flex h-11 w-full items-center justify-between gap-1 rounded-md border px-1.5 text-left transition-all duration-200 ${
-                  copiedItemId === item.id
-                    ? 'border-emerald-400/40 bg-emerald-500/10'
-                    : failedItemId === item.id
-                      ? 'border-rose-400/40 bg-rose-500/10'
-                      : 'border-white/[0.06] bg-zinc-900/50 hover:border-white/[0.12] hover:bg-zinc-900/80'
-                }`}
-              >
-                <span className="flex min-w-0 items-center gap-1">
-                  {item.icon &&
-                    (() => {
-                      const entry = getIconEntry(item.icon)
-                      if (!entry) return null
-                      const Icon = entry.component
-                      return <Icon className="h-3 w-3 shrink-0 text-indigo-400" />
-                    })()}
-                  <span className="min-w-0">
-                    <span className="block truncate text-xs font-semibold leading-none text-zinc-100">
-                      {item.label}
-                    </span>
-                    <span className="mt-0.5 block truncate text-[9px] leading-none text-zinc-400">
-                      {item.value}
+        <ul className="mt-1 grid grid-cols-2 gap-1">
+          {topResults.map((item) => {
+            const fieldId = item.fieldId
+
+            return (
+              <li key={item.id} className="flex min-h-12 items-stretch gap-1">
+                <button
+                  type="button"
+                  onClick={() => handleCopy(item)}
+                  title={item.label}
+                  className={`flex min-h-12 min-w-0 flex-1 items-center justify-between gap-1 rounded-md border p-2 text-left transition-all duration-200 ${
+                    copiedItemId === item.id
+                      ? 'border-emerald-400/40 bg-emerald-500/10'
+                      : failedItemId === item.id
+                        ? 'border-rose-400/40 bg-rose-500/10'
+                        : 'border-white/[0.06] bg-zinc-900/50 hover:border-white/[0.12] hover:bg-zinc-900/80'
+                  }`}
+                >
+                  <span className="flex min-w-0 items-center gap-1">
+                    {item.icon &&
+                      (() => {
+                        const entry = getIconEntry(item.icon)
+                        if (!entry) return null
+                        const Icon = entry.component
+                        return <Icon className="h-3 w-3 shrink-0 text-indigo-400" />
+                      })()}
+                    <span className="min-w-0">
+                      <span className="block truncate text-xs font-semibold leading-none text-zinc-100">
+                        {item.label}
+                      </span>
+                      <span className="mt-0.5 block truncate text-[11px] leading-tight text-zinc-400">
+                        {item.value}
+                      </span>
                     </span>
                   </span>
-                </span>
-                {arrangeMode && item.fieldId ? (
-                  <span className="ml-1 flex shrink-0 flex-col gap-0.5">
+                  {copiedItemId === item.id ? (
+                    <Check className="h-3 w-3 shrink-0 text-emerald-400" />
+                  ) : (
+                    <Copy
+                      className={`h-3 w-3 shrink-0 ${
+                        failedItemId === item.id ? 'text-rose-400' : 'text-zinc-500'
+                      }`}
+                    />
+                  )}
+                </button>
+                {arrangeMode && fieldId && (
+                  <span className="flex shrink-0 flex-col justify-center gap-0">
                     <button
                       type="button"
                       aria-label={`Move ${item.label} up`}
                       title="Move up"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        moveInUserOrder(item.fieldId as string, 'up')
-                      }}
-                      disabled={(userOrderIndexMap.get(item.fieldId) ?? 0) === 0}
-                      className="inline-flex h-3.5 w-3.5 items-center justify-center rounded border border-white/[0.08] text-zinc-300 disabled:opacity-40"
+                      onClick={() => moveInUserOrder(fieldId, 'up')}
+                      disabled={(userOrderIndexMap.get(fieldId) ?? 0) === 0}
+                      className="inline-flex h-6 w-6 items-center justify-center rounded border border-white/[0.08] text-zinc-300 disabled:opacity-40"
                     >
-                      <ChevronUp className="h-2.5 w-2.5" />
+                      <ChevronUp className="h-3.5 w-3.5" />
                     </button>
                     <button
                       type="button"
                       aria-label={`Move ${item.label} down`}
                       title="Move down"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        moveInUserOrder(item.fieldId as string, 'down')
-                      }}
+                      onClick={() => moveInUserOrder(fieldId, 'down')}
                       disabled={
-                        (userOrderIndexMap.get(item.fieldId) ?? effectiveUserOrder.length - 1) >=
+                        (userOrderIndexMap.get(fieldId) ?? effectiveUserOrder.length - 1) >=
                         effectiveUserOrder.length - 1
                       }
-                      className="inline-flex h-3.5 w-3.5 items-center justify-center rounded border border-white/[0.08] text-zinc-300 disabled:opacity-40"
+                      className="inline-flex h-6 w-6 items-center justify-center rounded border border-white/[0.08] text-zinc-300 disabled:opacity-40"
                     >
-                      <ChevronDown className="h-2.5 w-2.5" />
+                      <ChevronDown className="h-3.5 w-3.5" />
                     </button>
                   </span>
-                ) : copiedItemId === item.id ? (
-                  <Check className="h-3 w-3 shrink-0 text-emerald-400" />
-                ) : (
-                  <Copy
-                    className={`h-3 w-3 shrink-0 ${
-                      failedItemId === item.id ? 'text-rose-400' : 'text-zinc-500'
-                    }`}
-                  />
                 )}
-              </button>
-            </li>
-          ))}
+              </li>
+            )
+          })}
           {!topResults.length && (
-            <li className="col-span-2 rounded-md border border-white/[0.06] bg-zinc-900/40 px-2 py-1.5 text-[11px] text-zinc-400">
+            <li className="col-span-2 rounded-md border border-white/[0.06] bg-zinc-900/40 px-2 py-1.5 text-xs text-zinc-400">
               No matching details found.
               <button
                 type="button"
@@ -456,8 +505,14 @@ export function SidepanelApp() {
           )}
         </ul>
 
+        {copyFeedback && (
+          <p role="status" aria-live="polite" className="mt-1 text-[10px] text-zinc-400">
+            {copyFeedback.message}
+          </p>
+        )}
+
         <div className="mt-2 flex items-center justify-between">
-          <p className="text-[9px] text-zinc-600">
+          <p className="text-[11px] text-zinc-500">
             Open panel:{' '}
             <kbd className="rounded bg-zinc-800 px-1 py-0.5 font-mono text-zinc-500">
               {sidePanelShortcut}
@@ -466,7 +521,7 @@ export function SidepanelApp() {
           <button
             type="button"
             onClick={() => void addCurrentSite()}
-            className={`flex items-center gap-1 text-[9px] transition-colors ${
+            className={`flex min-h-8 items-center gap-1 px-1 text-[11px] transition-colors ${
               addSiteStatus === 'added'
                 ? 'text-emerald-400'
                 : addSiteStatus === 'exists'

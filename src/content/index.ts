@@ -5,9 +5,11 @@ type Candidate = {
   hint: string
 }
 
-const INPUT_SELECTOR = 'input:not([type="hidden"]):not([type="submit"]), textarea, select'
+const INPUT_SELECTOR =
+  'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]):not([type="file"]):not([type="checkbox"]):not([type="radio"]), textarea, select, [contenteditable="true"], [contenteditable=""], [contenteditable="plaintext-only"]'
 const ELEMENT_ID_ATTR = 'data-applynest-id'
 const CHIP_ATTR = 'data-applynest-chip-for'
+const FOCUSED_ATTR = 'data-applynest-focused'
 
 let mounted = false
 let lastFocusedElementId: string | null = null
@@ -132,18 +134,31 @@ function ensureStyles() {
       color: #71717a;
     }
 
+    .applynest-results {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+    }
+
     .applynest-item {
       width: 100%;
+      min-width: 0;
       border-radius: 8px;
       border: 1px solid rgba(63, 63, 70, 0.4);
       background: #18181b;
       color: #fafafa;
       cursor: pointer;
-      padding: 10px 12px;
-      margin-bottom: 6px;
+      padding: 8px;
       text-align: left;
       font-size: 13px;
       transition: background 0.15s, border-color 0.15s;
+    }
+
+    .applynest-item strong {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .applynest-item:hover {
@@ -258,11 +273,19 @@ function ensureElementId(element: HTMLElement) {
 }
 
 function isFillableElement(element: Element | null): element is HTMLElement {
-  return (
-    element instanceof HTMLElement &&
-    element.matches(INPUT_SELECTOR) &&
-    !element.hasAttribute('disabled')
-  )
+  if (!(element instanceof HTMLElement)) return false
+  if (element instanceof HTMLInputElement) {
+    return (
+      !element.disabled &&
+      !element.readOnly &&
+      !['hidden', 'file', 'checkbox', 'radio', 'button', 'submit', 'reset', 'image'].includes(
+        element.type
+      )
+    )
+  }
+  if (element instanceof HTMLTextAreaElement) return !element.disabled && !element.readOnly
+  if (element instanceof HTMLSelectElement) return !element.disabled
+  return element.isContentEditable
 }
 
 function collectCandidates(): Candidate[] {
@@ -283,28 +306,27 @@ function collectCandidates(): Candidate[] {
 
 function fillElement(element: HTMLElement, value: string) {
   if (element instanceof HTMLInputElement) {
-    if (element.disabled || element.readOnly) {
-      return false
-    }
-
-    const blockedTypes = new Set(['file', 'checkbox', 'radio', 'button', 'submit', 'reset'])
-    if (blockedTypes.has(element.type)) {
-      return false
-    }
-
-    element.value = value
-    element.dispatchEvent(new Event('input', { bubbles: true }))
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+    if (element.disabled || element.readOnly) return false
+    if (valueSetter) valueSetter.call(element, value)
+    else element.value = value
+    if (element.value !== value) return false
+    element.dispatchEvent(
+      new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value })
+    )
     element.dispatchEvent(new Event('change', { bubbles: true }))
     return true
   }
 
   if (element instanceof HTMLTextAreaElement) {
-    if (element.disabled || element.readOnly) {
-      return false
-    }
-
-    element.value = value
-    element.dispatchEvent(new Event('input', { bubbles: true }))
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+    if (element.disabled || element.readOnly) return false
+    if (valueSetter) valueSetter.call(element, value)
+    else element.value = value
+    if (element.value !== value) return false
+    element.dispatchEvent(
+      new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value })
+    )
     element.dispatchEvent(new Event('change', { bubbles: true }))
     return true
   }
@@ -329,11 +351,56 @@ function fillElement(element: HTMLElement, value: string) {
     return true
   }
 
+  if (element.isContentEditable) {
+    const editingHost = element.closest<HTMLElement>(
+      '[contenteditable="true"], [contenteditable=""], [contenteditable="plaintext-only"]'
+    )
+    if (!editingHost?.isContentEditable) return false
+
+    const selection = document.getSelection()
+    const range =
+      selection?.rangeCount && editingHost.contains(selection.anchorNode)
+        ? selection.getRangeAt(0).cloneRange()
+        : null
+    editingHost.focus({ preventScroll: true })
+
+    if (range) {
+      selection?.removeAllRanges()
+      selection?.addRange(range)
+    }
+
+    if (range && document.execCommand('insertText', false, value)) return true
+
+    const insertionRange = range ?? document.createRange()
+    if (!range) {
+      insertionRange.selectNodeContents(editingHost)
+      insertionRange.collapse(false)
+    }
+    insertionRange.deleteContents()
+    const textNode = document.createTextNode(value)
+    insertionRange.insertNode(textNode)
+    insertionRange.setStartAfter(textNode)
+    insertionRange.collapse(true)
+    selection?.removeAllRanges()
+    selection?.addRange(insertionRange)
+    editingHost.dispatchEvent(
+      new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value })
+    )
+    return true
+  }
+
   return false
 }
 
 function resolveInsertTarget(): HTMLElement | null {
-  const activeElement = document.activeElement
+  let activeElement: Element | null = document.activeElement
+  while (
+    activeElement instanceof HTMLElement &&
+    activeElement.shadowRoot?.activeElement instanceof Element
+  ) {
+    activeElement = activeElement.shadowRoot.activeElement
+  }
+
   if (isFillableElement(activeElement)) {
     ensureElementId(activeElement)
     return activeElement
@@ -446,6 +513,7 @@ function mountFloatingWidget() {
   search.placeholder = 'Search vault values...'
 
   const resultRoot = document.createElement('div')
+  resultRoot.className = 'applynest-results'
 
   async function refresh(query: string) {
     try {
@@ -518,9 +586,11 @@ function mount() {
   void runSmartDetection()
 
   document.addEventListener('focusin', (event) => {
+    document.querySelector(`[${FOCUSED_ATTR}="true"]`)?.removeAttribute(FOCUSED_ATTR)
     const target = event.target instanceof Element ? event.target : null
     if (!isFillableElement(target)) return
 
+    target.setAttribute(FOCUSED_ATTR, 'true')
     lastFocusedElementId = ensureElementId(target)
   })
 
