@@ -197,7 +197,6 @@ export async function searchAll(query: string): Promise<SearchResultItem[]> {
 
   return [...fieldResults, ...templateResults]
     .sort((a, b) => b.score - a.score)
-    .slice(0, 20)
     .map((item) => {
       const base = {
         id: item.id,

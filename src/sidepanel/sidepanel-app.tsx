@@ -156,7 +156,7 @@ export function SidepanelApp() {
       })
     }
 
-    return sorted.slice(0, 20)
+    return sorted
   }, [results, sortBy, effectiveUserOrder, activeTab])
 
   const userOrderIndexMap = useMemo(
