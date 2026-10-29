@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "ApplyNest",
   "description": "Save job application details once, then copy or fill them anywhere quickly.",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "icons": {
     "16": "icon16.png",
     "32": "icon32.png",
@@ -25,17 +25,8 @@
     "service_worker": "assets/service-worker.js",
     "type": "module"
   },
-  "permissions": [
-    "storage",
-    "activeTab",
-    "tabs",
-    "scripting",
-    "sidePanel",
-    "clipboardWrite"
-  ],
-  "host_permissions": [
-    "<all_urls>"
-  ],
+  "permissions": ["storage", "activeTab", "tabs", "scripting", "sidePanel", "clipboardWrite"],
+  "host_permissions": ["<all_urls>"],
   "commands": {
     "_execute_action": {
       "suggested_key": {
@@ -287,20 +278,14 @@
         "*://*.phenom.com/*",
         "*://*.eightfold.ai/*"
       ],
-      "js": [
-        "assets/content.js"
-      ],
+      "js": ["assets/content.js"],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": [
-        "logo.png"
-      ],
-      "matches": [
-        "<all_urls>"
-      ]
+      "resources": ["logo.png"],
+      "matches": ["<all_urls>"]
     }
   ]
 }
